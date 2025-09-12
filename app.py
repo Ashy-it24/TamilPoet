@@ -182,11 +182,7 @@ def main():
             selected_accent = 'com'
     
     if tamil_text.strip():
-        # Show original text
-        st.subheader("Original Text:")
-        st.text_area("Original Text", value=tamil_text, height=100, disabled=True, key="original", label_visibility="collapsed")
-        
-        # Process text with preprocessing and translation
+        # Process text with preprocessing and translation first
         processed_text = tamil_text
         translation_changes = []
         
@@ -202,7 +198,9 @@ def main():
         elif selected_translation_mode == "ai":
             try:
                 with st.spinner("AI is analyzing and modernizing your classical Tamil text..."):
-                    ai_result = translate_classical_tamil_with_ai(processed_text)
+                    # Use comprehensive translation for better context
+                    from openai_tamil_translator import get_comprehensive_translation
+                    ai_result = get_comprehensive_translation(processed_text, use_ai=True, use_web_research=True)
                     processed_text = ai_result['modernized_text']
                     translation_changes = ai_result.get('changes_made', [])
                     confidence = ai_result.get('confidence', 0.0)
@@ -223,7 +221,9 @@ def main():
             processed_text = replace_old_tamil_words(processed_text)
             try:
                 with st.spinner("Enhancing with AI translation..."):
-                    ai_result = translate_classical_tamil_with_ai(processed_text)
+                    # Use comprehensive translation for better context
+                    from openai_tamil_translator import get_comprehensive_translation
+                    ai_result = get_comprehensive_translation(processed_text, use_ai=True, use_web_research=True)
                     processed_text = ai_result['modernized_text']
                     translation_changes = ai_result.get('changes_made', [])
                     
@@ -235,20 +235,60 @@ def main():
                 if 'ai_translation_info' in st.session_state:
                     del st.session_state.ai_translation_info
         
-        # Show processed text if different from original
+        # True Side-by-Side Text Display
+        st.header("📝 Text Comparison")
+        
+        # Create side-by-side columns for text display
+        text_col1, text_col2 = st.columns(2)
+        
+        with text_col1:
+            st.subheader("🎭 Original Classical Text")
+            st.text_area(
+                "Original Text", 
+                value=tamil_text, 
+                height=150, 
+                disabled=True, 
+                key="original_display", 
+                label_visibility="collapsed"
+            )
+            st.caption(f"Length: {len(tamil_text.split())} words")
+        
+        with text_col2:
+            if processed_text != tamil_text:
+                processing_description = []
+                if use_preprocessing:
+                    processing_description.append("classical Tamil preprocessing")
+                if selected_translation_mode in ["dictionary", "both"]:
+                    processing_description.append("dictionary-based word replacements")
+                if selected_translation_mode in ["ai", "both"]:
+                    processing_description.append("AI-powered translation")
+                
+                description = " and ".join(processing_description)
+                st.subheader(f"🆕 Modernized Text ({description})")
+                st.text_area(
+                    "Processed Text", 
+                    value=processed_text, 
+                    height=150, 
+                    disabled=True, 
+                    key="processed_display", 
+                    label_visibility="collapsed"
+                )
+                st.caption(f"Length: {len(processed_text.split())} words")
+            else:
+                st.subheader("🆕 Modernized Text")
+                st.info("No changes needed - text is already in modern form")
+                st.text_area(
+                    "Same as Original", 
+                    value=processed_text, 
+                    height=150, 
+                    disabled=True, 
+                    key="same_as_original", 
+                    label_visibility="collapsed"
+                )
+                st.caption("Same as original text")
+            
+        # Show translation and processing information
         if processed_text != tamil_text:
-            processing_description = []
-            if use_preprocessing:
-                processing_description.append("classical Tamil preprocessing")
-            if selected_translation_mode in ["dictionary", "both"]:
-                processing_description.append("dictionary-based word replacements")
-            if selected_translation_mode in ["ai", "both"]:
-                processing_description.append("AI-powered translation")
-            
-            description = " and ".join(processing_description)
-            st.subheader(f"Processed Text (with {description}):")
-            st.text_area("Processed Text", value=processed_text, height=100, disabled=True, key="processed", label_visibility="collapsed")
-            
             # Show AI translation changes and enhanced information
             if translation_changes and selected_translation_mode in ["ai", "both"]:
                 st.success("🤖 AI Translation Changes:")
@@ -432,83 +472,121 @@ def main():
                             st.session_state.modern_audio_ready = True
                             st.session_state.tts_provider = tts_provider[1]
         
-        # Dual audio playback and download section
-        audio_sections_exist = False
+        # Unified Dual Voice Audio Playback Section
+        st.header("🎵 Dual Voice Audio Playback")
         
-        # Original audio playback section
-        if hasattr(st.session_state, 'original_audio_ready') and st.session_state.original_audio_ready:
-            audio_sections_exist = True
-            st.header("🎭 Original Classical Tamil Audio")
-            
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                # Audio player for original
-                st.audio(st.session_state.original_audio_bytes, format='audio/mp3')
-                
-            with col2:
-                # Download button for original
-                original_filename = "classical_tamil_original.mp3"
-                st.download_button(
-                    label="📥 Download Original",
-                    data=st.session_state.original_audio_bytes,
-                    file_name=original_filename,
-                    mime="audio/mp3"
-                )
-                
-                # File info for original
-                original_size = len(st.session_state.original_audio_bytes)
-                st.caption(f"Size: {original_size / 1024:.1f} KB")
+        # Check which audio files are available
+        has_original = hasattr(st.session_state, 'original_audio_ready') and st.session_state.original_audio_ready
+        has_modern = hasattr(st.session_state, 'modern_audio_ready') and st.session_state.modern_audio_ready
         
-        # Modern audio playback section
-        if hasattr(st.session_state, 'modern_audio_ready') and st.session_state.modern_audio_ready:
-            audio_sections_exist = True
-            st.header("🆕 Modern Translation Audio")
+        if has_original or has_modern:
+            st.info("🎧 Compare pronunciation and clarity between classical and modern versions")
             
-            col1, col2 = st.columns([3, 1])
+            # Create side-by-side audio player columns
+            audio_col1, audio_col2 = st.columns(2)
             
-            with col1:
-                # Audio player for modern
-                st.audio(st.session_state.modern_audio_bytes, format='audio/mp3')
+            # Original Classical Audio Column
+            with audio_col1:
+                st.subheader("🎭 Original Classical Tamil")
+                if has_original:
+                    st.audio(st.session_state.original_audio_bytes, format='audio/mp3')
+                    
+                    # Download and info section
+                    original_size = len(st.session_state.original_audio_bytes)
+                    st.caption(f"📊 File size: {original_size / 1024:.1f} KB")
+                    
+                    original_filename = "classical_tamil_original.mp3"
+                    st.download_button(
+                        label="📥 Download Original",
+                        data=st.session_state.original_audio_bytes,
+                        file_name=original_filename,
+                        mime="audio/mp3",
+                        key="download_original"
+                    )
+                    
+                    # Show provider info if available
+                    if hasattr(st.session_state, 'tts_provider'):
+                        st.caption(f"🔊 Generated using: {st.session_state.tts_provider}")
+                else:
+                    st.info("🎭 Original audio not generated yet")
+                    st.caption("Click 'Generate Original Audio' above to create this version")
+            
+            # Modern Translation Audio Column
+            with audio_col2:
+                st.subheader("🆕 Modern Translation")
+                if has_modern:
+                    st.audio(st.session_state.modern_audio_bytes, format='audio/mp3')
+                    
+                    # Download and info section
+                    modern_size = len(st.session_state.modern_audio_bytes)
+                    st.caption(f"📊 File size: {modern_size / 1024:.1f} KB")
+                    
+                    modern_filename = "tamil_modern_translation.mp3"
+                    st.download_button(
+                        label="📥 Download Modern",
+                        data=st.session_state.modern_audio_bytes,
+                        file_name=modern_filename,
+                        mime="audio/mp3",
+                        key="download_modern"
+                    )
+                    
+                    # Show provider info if available
+                    if hasattr(st.session_state, 'tts_provider'):
+                        st.caption(f"🔊 Generated using: {st.session_state.tts_provider}")
+                else:
+                    if processed_text != tamil_text:
+                        st.info("🆕 Modern audio not generated yet")
+                        st.caption("Click 'Generate Modern Audio' above to create this version")
+                    else:
+                        st.info("🔄 Same as original")
+                        st.caption("No modernization was applied to the text")
+            
+            # Show comparison tips if both are available
+            if has_original and has_modern:
+                st.success("✅ Both audio versions ready! Use the players above to compare pronunciation and clarity.")
                 
-            with col2:
-                # Download button for modern
-                modern_filename = "tamil_modern_translation.mp3"
-                st.download_button(
-                    label="📥 Download Modern",
-                    data=st.session_state.modern_audio_bytes,
-                    file_name=modern_filename,
-                    mime="audio/mp3"
-                )
-                
-                # File info for modern
-                modern_size = len(st.session_state.modern_audio_bytes)
-                st.caption(f"Size: {modern_size / 1024:.1f} KB")
-        
-        # Audio comparison section (if both audios exist)
-        if (hasattr(st.session_state, 'original_audio_ready') and st.session_state.original_audio_ready and 
-            hasattr(st.session_state, 'modern_audio_ready') and st.session_state.modern_audio_ready):
-            
-            st.header("🔄 Audio Comparison")
-            st.info("Compare the pronunciation and clarity between classical and modern versions")
-            
-            comparison_col1, comparison_col2 = st.columns(2)
-            
-            with comparison_col1:
-                st.subheader("🎭 Classical Version")
-                st.audio(st.session_state.original_audio_bytes, format='audio/mp3')
-                original_size = len(st.session_state.original_audio_bytes)
-                st.caption(f"Original classical Tamil text ({original_size / 1024:.1f} KB)")
-                
-            with comparison_col2:
-                st.subheader("🆕 Modern Version")
-                st.audio(st.session_state.modern_audio_bytes, format='audio/mp3')
-                modern_size = len(st.session_state.modern_audio_bytes)
-                st.caption(f"Modern meaning-based translation ({modern_size / 1024:.1f} KB)")
-        
-        # Show message if no audio generated yet
-        if not audio_sections_exist:
+                # Add some comparison insights
+                if hasattr(st.session_state, 'ai_translation_info') and st.session_state.ai_translation_info:
+                    ai_info = st.session_state.ai_translation_info
+                    confidence = ai_info.get('confidence', 0.0)
+                    if confidence > 0.8:
+                        st.info(f"💡 High-confidence translation ({confidence:.1%}) - notice the improved clarity in the modern version")
+                    elif confidence > 0.6:
+                        st.warning(f"⚠️ Moderate-confidence translation ({confidence:.1%}) - compare carefully for accuracy")
+        else:
+            # No audio generated yet - show helpful message
             st.info("🎵 Select audio versions above and click generate to create audio files")
+            
+            # Show preview of what will be available
+            preview_col1, preview_col2 = st.columns(2)
+            
+            with preview_col1:
+                st.subheader("🎭 Original Classical Tamil")
+                st.caption("Will contain the original text as-is")
+                st.text_area(
+                    "Preview", 
+                    value=tamil_text[:100] + "..." if len(tamil_text) > 100 else tamil_text,
+                    height=80,
+                    disabled=True,
+                    key="preview_original",
+                    label_visibility="collapsed"
+                )
+            
+            with preview_col2:
+                st.subheader("🆕 Modern Translation")
+                if processed_text != tamil_text:
+                    st.caption("Will contain the modernized translation")
+                    st.text_area(
+                        "Preview", 
+                        value=processed_text[:100] + "..." if len(processed_text) > 100 else processed_text,
+                        height=80,
+                        disabled=True,
+                        key="preview_modern",
+                        label_visibility="collapsed"
+                    )
+                else:
+                    st.caption("Same as original - no modernization applied")
+                    st.info("No changes were made to the text")
     
     else:
         st.info("👆 Please enter Tamil text above to generate audio")

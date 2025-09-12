@@ -7,11 +7,50 @@ import os
 import re
 from openai import OpenAI
 
-# the newest OpenAI model is "gpt-5" which was released August 7, 2025.
-# do not change this unless explicitly requested by the user
-
+# Configure OpenAI model with fallback support
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 openai = OpenAI(api_key=OPENAI_API_KEY)
+
+# Model configuration with fallback hierarchy
+DEFAULT_MODELS = ["gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
+
+def get_available_model(preferred_model: str = None) -> str:
+    """Get the best available OpenAI model with fallback support
+    
+    Args:
+        preferred_model: Optional preferred model to try first
+    
+    Returns:
+        String name of the available model
+    """
+    models_to_try = []
+    
+    # Add preferred model first if specified
+    if preferred_model:
+        models_to_try.append(preferred_model)
+    
+    # Add default fallback models
+    models_to_try.extend(DEFAULT_MODELS)
+    
+    # Try each model in order
+    for model in models_to_try:
+        try:
+            # Quick test to see if model is available
+            response = openai.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "test"}],
+                max_tokens=1,
+                timeout=5
+            )
+            print(f"Using OpenAI model: {model}")
+            return model
+        except Exception as e:
+            print(f"Model {model} not available: {str(e)}")
+            continue
+    
+    # If no models work, return the most basic one as last resort
+    print("Warning: No models available, using gpt-3.5-turbo as fallback")
+    return "gpt-3.5-turbo"
 
 def translate_classical_tamil_with_ai(text: str, context_info: dict = None, use_web_research: bool = True) -> dict:
     """Use OpenAI to provide meaning-based translation of classical Tamil to modern Tamil
@@ -73,8 +112,11 @@ CONTEXTUAL INFORMATION:
         }}
         """
         
+        # Get best available model with fallback
+        model_to_use = get_available_model("gpt-4o")
+        
         response = openai.chat.completions.create(
-            model="gpt-5",
+            model=model_to_use,
             messages=[
                 {
                     "role": "system",
@@ -182,8 +224,11 @@ def get_word_by_word_translation(text: str, context_info: dict = None) -> dict:
         }}
         """
         
+        # Get best available model with fallback  
+        model_to_use = get_available_model("gpt-4o")
+        
         response = openai.chat.completions.create(
-            model="gpt-5",
+            model=model_to_use,
             messages=[
                 {
                     "role": "system", 
