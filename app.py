@@ -4,6 +4,8 @@ import os
 from gtts import gTTS
 import base64
 from tamil_dictionary import TAMIL_WORD_MAPPING
+from openai_tamil_translator import translate_classical_tamil_with_ai, get_word_by_word_translation
+from premium_tts_service import PremiumTTSService
 
 def preprocess_classical_tamil(text):
     """Advanced preprocessing for classical Tamil texts to improve TTS pronunciation"""
@@ -73,18 +75,35 @@ def replace_old_tamil_words(text):
     
     return ' '.join(replaced_words)
 
-def text_to_speech_tamil(text, voice_accent='com', speech_speed=False):
-    """Convert Tamil text to speech using gTTS and return audio bytes"""
+def text_to_speech_tamil(text, provider='gtts', voice_accent='com', speech_speed=False):
+    """Convert Tamil text to speech using premium TTS services"""
     try:
-        # Create gTTS object for Tamil with voice options
-        tts = gTTS(text=text, lang='ta', slow=speech_speed, tld=voice_accent)
+        tts_service = PremiumTTSService()
         
-        # Save to bytes buffer
-        audio_buffer = io.BytesIO()
-        tts.write_to_fp(audio_buffer)
-        audio_buffer.seek(0)
+        if provider == 'gtts':
+            audio_bytes = tts_service.generate_speech(
+                text, 
+                provider='gtts', 
+                voice_accent=voice_accent, 
+                slow=speech_speed
+            )
+        elif provider == 'elevenlabs':
+            audio_bytes = tts_service.generate_speech(text, provider='elevenlabs')
+        elif provider == 'google_cloud':
+            audio_bytes = tts_service.generate_speech(text, provider='google_cloud')
+        elif provider == 'azure':
+            audio_bytes = tts_service.generate_speech(text, provider='azure')
+        else:
+            # Fallback to gTTS
+            audio_bytes = tts_service.generate_speech(
+                text, 
+                provider='gtts', 
+                voice_accent=voice_accent, 
+                slow=speech_speed
+            )
         
-        return audio_buffer.getvalue()
+        return audio_bytes
+        
     except Exception as e:
         st.error(f"Error generating speech: {str(e)}")
         return None
@@ -108,10 +127,15 @@ def main():
     col1, col2 = st.columns(2)
     
     with col1:
-        use_modern_words = st.checkbox(
-            "Replace old Tamil words with modern equivalents",
-            value=True,
-            help="This will replace archaic Tamil words with their modern counterparts for better pronunciation"
+        translation_mode = st.selectbox(
+            "Translation Method",
+            options=[
+                ("dictionary", "Dictionary-based (Fast)"),
+                ("ai", "AI-powered (Advanced)"),
+                ("both", "Both Dictionary + AI")
+            ],
+            format_func=lambda x: x[1],
+            help="Choose how to modernize classical Tamil words"
         )
         
         use_preprocessing = st.checkbox(
@@ -127,54 +151,103 @@ def main():
         )
     
     with col2:
-        voice_accent = st.selectbox(
-            "Voice Accent Region",
+        tts_provider = st.selectbox(
+            "TTS Provider",
             options=[
-                ("com", "Global (Default)"),
-                ("co.in", "India"),
-                ("com.au", "Australia"),
-                ("co.uk", "United Kingdom"),
-                ("com.sg", "Singapore")
+                ("gtts", "Google TTS (Free)"),
+                ("elevenlabs", "ElevenLabs (Premium)"),
+                ("google_cloud", "Google Cloud (Professional)"),
+                ("azure", "Microsoft Azure (Professional)")
             ],
             format_func=lambda x: x[1],
-            help="Different Google domains may provide slight accent variations"
+            help="Choose text-to-speech quality level. Premium services require API keys."
         )
         
-        # Extract the domain value from the selected tuple
-        selected_accent = voice_accent[0]
+        # Show accent options only for gTTS
+        if tts_provider[0] == 'gtts':
+            voice_accent = st.selectbox(
+                "Voice Accent Region",
+                options=[
+                    ("com", "Global (Default)"),
+                    ("co.in", "India"),
+                    ("com.au", "Australia"),
+                    ("co.uk", "United Kingdom"),
+                    ("com.sg", "Singapore")
+                ],
+                format_func=lambda x: x[1],
+                help="Different Google domains may provide slight accent variations"
+            )
+            selected_accent = voice_accent[0]
+        else:
+            selected_accent = 'com'
     
     if tamil_text.strip():
         # Show original text
         st.subheader("Original Text:")
         st.text_area("Original Text", value=tamil_text, height=100, disabled=True, key="original", label_visibility="collapsed")
         
-        # Process text with preprocessing and word replacement
+        # Process text with preprocessing and translation
         processed_text = tamil_text
+        translation_changes = []
         
         # Apply advanced preprocessing if enabled
         if use_preprocessing:
             processed_text = preprocess_classical_tamil(processed_text)
         
-        # Apply word replacement if enabled
-        if use_modern_words:
+        # Apply translation based on selected method
+        selected_translation_mode = translation_mode[0]
+        
+        if selected_translation_mode == "dictionary":
             processed_text = replace_old_tamil_words(processed_text)
+        elif selected_translation_mode == "ai":
+            try:
+                with st.spinner("AI is analyzing and modernizing your classical Tamil text..."):
+                    ai_result = translate_classical_tamil_with_ai(processed_text)
+                    processed_text = ai_result['modernized_text']
+                    translation_changes = ai_result.get('changes_made', [])
+                    confidence = ai_result.get('confidence', 0.0)
+                    
+                    if confidence < 0.7:
+                        st.warning(f"AI translation confidence is {confidence:.1%}. Results may need review.")
+            except Exception as e:
+                st.error(f"AI translation failed: {str(e)}. Falling back to dictionary method.")
+                processed_text = replace_old_tamil_words(processed_text)
+        elif selected_translation_mode == "both":
+            # First apply dictionary, then AI
+            processed_text = replace_old_tamil_words(processed_text)
+            try:
+                with st.spinner("Enhancing with AI translation..."):
+                    ai_result = translate_classical_tamil_with_ai(processed_text)
+                    processed_text = ai_result['modernized_text']
+                    translation_changes = ai_result.get('changes_made', [])
+            except Exception as e:
+                st.warning(f"AI enhancement failed: {str(e)}. Using dictionary translation only.")
         
         # Show processed text if different from original
         if processed_text != tamil_text:
             processing_description = []
             if use_preprocessing:
                 processing_description.append("classical Tamil preprocessing")
-            if use_modern_words:
-                processing_description.append("modern word replacements")
+            if selected_translation_mode in ["dictionary", "both"]:
+                processing_description.append("dictionary-based word replacements")
+            if selected_translation_mode in ["ai", "both"]:
+                processing_description.append("AI-powered translation")
             
             description = " and ".join(processing_description)
             st.subheader(f"Processed Text (with {description}):")
             st.text_area("Processed Text", value=processed_text, height=100, disabled=True, key="processed", label_visibility="collapsed")
             
-            # Show word replacements made (if enabled)
-            if use_modern_words:
+            # Show AI translation changes
+            if translation_changes and selected_translation_mode in ["ai", "both"]:
+                st.success("🤖 AI Translation Changes:")
+                for i, change in enumerate(translation_changes[:5], 1):  # Show max 5 changes
+                    st.write(f"{i}. {change}")
+                if len(translation_changes) > 5:
+                    st.write(f"... and {len(translation_changes) - 5} more changes")
+            
+            # Show dictionary replacements made (if enabled)
+            elif selected_translation_mode == "dictionary":
                 original_words = set(tamil_text.split())
-                
                 replacements_made = []
                 for orig_word in original_words:
                     clean_orig = orig_word.strip('.,!?;:"()[]{}')
@@ -182,18 +255,17 @@ def main():
                         replacements_made.append(f"{clean_orig} → {TAMIL_WORD_MAPPING[clean_orig]}")
                 
                 if replacements_made:
-                    st.info(f"Word replacements made: {', '.join(replacements_made)}")
+                    st.info(f"📖 Dictionary replacements: {', '.join(replacements_made)}")
             
-            # Show preprocessing changes (if enabled and no word replacements to avoid redundancy)
-            if use_preprocessing and not use_modern_words:
+            # Show preprocessing changes (if enabled)
+            if use_preprocessing and selected_translation_mode not in ["dictionary", "ai", "both"]:
                 st.info("Text normalized for better TTS pronunciation (sandhi resolution, phonetic adjustments)")
-        elif use_preprocessing or use_modern_words:
-            # Show info even if text didn't change to indicate processing was attempted
+        else:
+            # Show info even if text didn't change
             processing_types = []
             if use_preprocessing:
                 processing_types.append("classical Tamil preprocessing")
-            if use_modern_words:
-                processing_types.append("modern word replacement")
+            processing_types.append(f"{translation_mode[1].lower()}")
             
             st.info(f"Text processing enabled ({', '.join(processing_types)}) but no changes were needed for this text.")
         
@@ -204,15 +276,21 @@ def main():
         
         with col1:
             if st.button("🔊 Generate Audio", type="primary"):
-                with st.spinner("Generating audio... Please wait..."):
-                    audio_bytes = text_to_speech_tamil(processed_text, selected_accent, speech_speed)
+                with st.spinner(f"Generating audio using {tts_provider[1]}... Please wait..."):
+                    audio_bytes = text_to_speech_tamil(
+                        processed_text, 
+                        provider=tts_provider[0], 
+                        voice_accent=selected_accent, 
+                        speech_speed=speech_speed
+                    )
                     
                     if audio_bytes:
-                        st.success("Audio generated successfully!")
+                        st.success(f"Audio generated successfully with {tts_provider[1]}!")
                         
                         # Store audio in session state
                         st.session_state.audio_bytes = audio_bytes
                         st.session_state.audio_ready = True
+                        st.session_state.tts_provider = tts_provider[1]
         
         # Audio playback and download section
         if hasattr(st.session_state, 'audio_ready') and st.session_state.audio_ready:
