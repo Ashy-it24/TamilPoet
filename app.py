@@ -5,6 +5,56 @@ from gtts import gTTS
 import base64
 from tamil_dictionary import TAMIL_WORD_MAPPING
 
+def preprocess_classical_tamil(text):
+    """Advanced preprocessing for classical Tamil texts to improve TTS pronunciation"""
+    import re
+    
+    # Remove or normalize various Tamil script variations
+    text = text.replace('்', '்')  # Normalize virama
+    
+    # Handle sandhi (euphonic combinations) - basic cases
+    # Replace common classical combinations with space-separated words
+    sandhi_patterns = {
+        r'தல்லும்': 'தான் அல்லும்',
+        r'கண்டும்': 'கண்டு உம்',
+        r'செய்தும்': 'செய்து உம்',
+        r'வந்தும்': 'வந்து உம்',
+        r'போனும்': 'போன உம்',
+    }
+    
+    for pattern, replacement in sandhi_patterns.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    
+    # Handle classical Tamil phonetic variations
+    phonetic_normalizations = {
+        r'ழ்': 'ள்',  # Simplify retroflex for TTS
+        r'ற்ற': 'ட்ட',  # Common sound changes
+        r'ன்ன': 'ண்ண',  # Nasal variations
+    }
+    
+    for pattern, replacement in phonetic_normalizations.items():
+        text = re.sub(pattern, replacement, text)
+    
+    # Handle classical verb endings - convert to modern forms
+    classical_verb_patterns = {
+        r'(\w+)ுமே$': r'\1ும்',  # -ume to -um
+        r'(\w+)வே$': r'\1வது',   # -ve to -vadhu
+        r'(\w+)தே$': r'\1ததே',   # -the to -thathe
+    }
+    
+    words = text.split()
+    normalized_words = []
+    
+    for word in words:
+        original_word = word
+        # Apply classical verb patterns
+        for pattern, replacement in classical_verb_patterns.items():
+            word = re.sub(pattern, replacement, word)
+        
+        normalized_words.append(word)
+    
+    return ' '.join(normalized_words)
+
 def replace_old_tamil_words(text):
     """Replace old Tamil words with modern equivalents using dictionary mapping"""
     words = text.split()
@@ -64,6 +114,12 @@ def main():
             help="This will replace archaic Tamil words with their modern counterparts for better pronunciation"
         )
         
+        use_preprocessing = st.checkbox(
+            "Advanced classical Tamil preprocessing",
+            value=True,
+            help="Normalize classical Tamil script, handle sandhi, and improve phonetic representation for TTS"
+        )
+        
         speech_speed = st.checkbox(
             "Slow speech for better clarity",
             value=False,
@@ -92,19 +148,32 @@ def main():
         st.subheader("Original Text:")
         st.text_area("Original Text", value=tamil_text, height=100, disabled=True, key="original", label_visibility="collapsed")
         
-        # Process text if word replacement is enabled
+        # Process text with preprocessing and word replacement
         processed_text = tamil_text
+        
+        # Apply advanced preprocessing if enabled
+        if use_preprocessing:
+            processed_text = preprocess_classical_tamil(processed_text)
+        
+        # Apply word replacement if enabled
         if use_modern_words:
-            processed_text = replace_old_tamil_words(tamil_text)
+            processed_text = replace_old_tamil_words(processed_text)
+        
+        # Show processed text if different from original
+        if processed_text != tamil_text:
+            processing_description = []
+            if use_preprocessing:
+                processing_description.append("classical Tamil preprocessing")
+            if use_modern_words:
+                processing_description.append("modern word replacements")
             
-            # Show processed text if different from original
-            if processed_text != tamil_text:
-                st.subheader("Processed Text (with modern word replacements):")
-                st.text_area("Processed Text", value=processed_text, height=100, disabled=True, key="processed", label_visibility="collapsed")
-                
-                # Show word replacements made
+            description = " and ".join(processing_description)
+            st.subheader(f"Processed Text (with {description}):")
+            st.text_area("Processed Text", value=processed_text, height=100, disabled=True, key="processed", label_visibility="collapsed")
+            
+            # Show word replacements made (if enabled)
+            if use_modern_words:
                 original_words = set(tamil_text.split())
-                processed_words = set(processed_text.split())
                 
                 replacements_made = []
                 for orig_word in original_words:
@@ -114,6 +183,19 @@ def main():
                 
                 if replacements_made:
                     st.info(f"Word replacements made: {', '.join(replacements_made)}")
+            
+            # Show preprocessing changes (if enabled and no word replacements to avoid redundancy)
+            if use_preprocessing and not use_modern_words:
+                st.info("Text normalized for better TTS pronunciation (sandhi resolution, phonetic adjustments)")
+        elif use_preprocessing or use_modern_words:
+            # Show info even if text didn't change to indicate processing was attempted
+            processing_types = []
+            if use_preprocessing:
+                processing_types.append("classical Tamil preprocessing")
+            if use_modern_words:
+                processing_types.append("modern word replacement")
+            
+            st.info(f"Text processing enabled ({', '.join(processing_types)}) but no changes were needed for this text.")
         
         # Audio generation section
         st.header("🎵 Audio Generation")
