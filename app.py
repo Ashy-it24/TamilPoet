@@ -207,11 +207,17 @@ def main():
                     translation_changes = ai_result.get('changes_made', [])
                     confidence = ai_result.get('confidence', 0.0)
                     
+                    # Store enhanced translation info in session state for display
+                    st.session_state.ai_translation_info = ai_result
+                    
                     if confidence < 0.7:
                         st.warning(f"AI translation confidence is {confidence:.1%}. Results may need review.")
             except Exception as e:
                 st.error(f"AI translation failed: {str(e)}. Falling back to dictionary method.")
                 processed_text = replace_old_tamil_words(processed_text)
+                # Clear AI info if fallback used
+                if 'ai_translation_info' in st.session_state:
+                    del st.session_state.ai_translation_info
         elif selected_translation_mode == "both":
             # First apply dictionary, then AI
             processed_text = replace_old_tamil_words(processed_text)
@@ -220,8 +226,14 @@ def main():
                     ai_result = translate_classical_tamil_with_ai(processed_text)
                     processed_text = ai_result['modernized_text']
                     translation_changes = ai_result.get('changes_made', [])
+                    
+                    # Store enhanced translation info for display
+                    st.session_state.ai_translation_info = ai_result
             except Exception as e:
                 st.warning(f"AI enhancement failed: {str(e)}. Using dictionary translation only.")
+                # Clear AI info if enhancement failed
+                if 'ai_translation_info' in st.session_state:
+                    del st.session_state.ai_translation_info
         
         # Show processed text if different from original
         if processed_text != tamil_text:
@@ -237,13 +249,51 @@ def main():
             st.subheader(f"Processed Text (with {description}):")
             st.text_area("Processed Text", value=processed_text, height=100, disabled=True, key="processed", label_visibility="collapsed")
             
-            # Show AI translation changes
+            # Show AI translation changes and enhanced information
             if translation_changes and selected_translation_mode in ["ai", "both"]:
                 st.success("🤖 AI Translation Changes:")
                 for i, change in enumerate(translation_changes[:5], 1):  # Show max 5 changes
                     st.write(f"{i}. {change}")
                 if len(translation_changes) > 5:
                     st.write(f"... and {len(translation_changes) - 5} more changes")
+                
+                # Show enhanced AI translation information
+                if hasattr(st.session_state, 'ai_translation_info') and st.session_state.ai_translation_info:
+                    ai_info = st.session_state.ai_translation_info
+                    
+                    # Translation method and confidence
+                    translation_method = ai_info.get('translation_method', 'AI-powered')
+                    confidence = ai_info.get('confidence', 0.0)
+                    st.info(f"📊 Translation Method: {translation_method} (Confidence: {confidence:.1%})")
+                    
+                    # Meaning explanation
+                    meaning_explanation = ai_info.get('meaning_explanation', '')
+                    if meaning_explanation:
+                        with st.expander("📖 Poetic Meaning & Interpretation", expanded=False):
+                            st.markdown(meaning_explanation)
+                    
+                    # Literary analysis  
+                    literary_analysis = ai_info.get('literary_analysis', '')
+                    if literary_analysis:
+                        with st.expander("📚 Literary Analysis", expanded=False):
+                            st.markdown(literary_analysis)
+                    
+                    # Context information
+                    context_info = ai_info.get('context_info', {})
+                    if context_info and any(context_info.values()):
+                        with st.expander("🏛️ Historical & Cultural Context", expanded=False):
+                            if context_info.get('period'):
+                                st.write(f"**Period:** {context_info['period']}")
+                            if context_info.get('themes'):
+                                themes = context_info['themes']
+                                if isinstance(themes, list):
+                                    st.write(f"**Themes:** {', '.join(themes)}")
+                                else:
+                                    st.write(f"**Themes:** {themes}")
+                            if context_info.get('context'):
+                                st.write(f"**Context:** {context_info['context']}")
+                            if context_info.get('literary_significance'):
+                                st.write(f"**Literary Significance:** {context_info['literary_significance']}")
             
             # Show dictionary replacements made (if enabled)
             elif selected_translation_mode == "dictionary":
