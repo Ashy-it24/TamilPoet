@@ -23,11 +23,11 @@ def replace_old_tamil_words(text):
     
     return ' '.join(replaced_words)
 
-def text_to_speech_tamil(text):
+def text_to_speech_tamil(text, voice_accent='com', speech_speed=False):
     """Convert Tamil text to speech using gTTS and return audio bytes"""
     try:
-        # Create gTTS object for Tamil
-        tts = gTTS(text=text, lang='ta', slow=False)
+        # Create gTTS object for Tamil with voice options
+        tts = gTTS(text=text, lang='ta', slow=speech_speed, tld=voice_accent)
         
         # Save to bytes buffer
         audio_buffer = io.BytesIO()
@@ -39,11 +39,6 @@ def text_to_speech_tamil(text):
         st.error(f"Error generating speech: {str(e)}")
         return None
 
-def create_download_link(audio_bytes, filename):
-    """Create a download link for the audio file"""
-    b64 = base64.b64encode(audio_bytes).decode()
-    href = f'<a href="data:audio/mp3;base64,{b64}" download="{filename}">Download MP3</a>'
-    return href
 
 def main():
     st.title("Tamil Poetry Text-to-Speech Converter")
@@ -57,18 +52,45 @@ def main():
         placeholder="உங்கள் தமிழ் கவிதை உரையை இங்கே பேஸ்ట் செய்யவும்..."
     )
     
-    # Word replacement option
-    st.header("🔄 Text Processing Options")
-    use_modern_words = st.checkbox(
-        "Replace old Tamil words with modern equivalents",
-        value=True,
-        help="This will replace archaic Tamil words with their modern counterparts for better pronunciation"
-    )
+    # Text processing and voice options
+    st.header("🔄 Text Processing & Voice Options")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        use_modern_words = st.checkbox(
+            "Replace old Tamil words with modern equivalents",
+            value=True,
+            help="This will replace archaic Tamil words with their modern counterparts for better pronunciation"
+        )
+        
+        speech_speed = st.checkbox(
+            "Slow speech for better clarity",
+            value=False,
+            help="Enable for slower, more deliberate pronunciation"
+        )
+    
+    with col2:
+        voice_accent = st.selectbox(
+            "Voice Accent Region",
+            options=[
+                ("com", "Global (Default)"),
+                ("co.in", "India"),
+                ("com.au", "Australia"),
+                ("co.uk", "United Kingdom"),
+                ("com.sg", "Singapore")
+            ],
+            format_func=lambda x: x[1],
+            help="Different Google domains may provide slight accent variations"
+        )
+        
+        # Extract the domain value from the selected tuple
+        selected_accent = voice_accent[0]
     
     if tamil_text.strip():
         # Show original text
         st.subheader("Original Text:")
-        st.text_area("", value=tamil_text, height=100, disabled=True, key="original")
+        st.text_area("Original Text", value=tamil_text, height=100, disabled=True, key="original", label_visibility="collapsed")
         
         # Process text if word replacement is enabled
         processed_text = tamil_text
@@ -78,7 +100,7 @@ def main():
             # Show processed text if different from original
             if processed_text != tamil_text:
                 st.subheader("Processed Text (with modern word replacements):")
-                st.text_area("", value=processed_text, height=100, disabled=True, key="processed")
+                st.text_area("Processed Text", value=processed_text, height=100, disabled=True, key="processed", label_visibility="collapsed")
                 
                 # Show word replacements made
                 original_words = set(tamil_text.split())
@@ -101,7 +123,7 @@ def main():
         with col1:
             if st.button("🔊 Generate Audio", type="primary"):
                 with st.spinner("Generating audio... Please wait..."):
-                    audio_bytes = text_to_speech_tamil(processed_text)
+                    audio_bytes = text_to_speech_tamil(processed_text, selected_accent, speech_speed)
                     
                     if audio_bytes:
                         st.success("Audio generated successfully!")
@@ -119,8 +141,12 @@ def main():
             
             # Download button
             filename = "tamil_poetry_audio.mp3"
-            download_link = create_download_link(st.session_state.audio_bytes, filename)
-            st.markdown(download_link, unsafe_allow_html=True)
+            st.download_button(
+                label="📥 Download MP3",
+                data=st.session_state.audio_bytes,
+                file_name=filename,
+                mime="audio/mp3"
+            )
             
             # File info
             audio_size = len(st.session_state.audio_bytes)
