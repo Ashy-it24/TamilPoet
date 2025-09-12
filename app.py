@@ -319,48 +319,196 @@ def main():
             
             st.info(f"Text processing enabled ({', '.join(processing_types)}) but no changes were needed for this text.")
         
-        # Audio generation section
-        st.header("🎵 Audio Generation")
+        # Dual audio generation section
+        st.header("🎵 Dual Voice Audio Generation")
         
-        col1, col2 = st.columns([1, 1])
+        # Audio generation options
+        st.subheader("Select Audio Versions to Generate:")
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("🔊 Generate Audio", type="primary"):
-                with st.spinner(f"Generating audio using {tts_provider[1]}... Please wait..."):
-                    audio_bytes = text_to_speech_tamil(
-                        processed_text, 
-                        provider=tts_provider[0], 
-                        voice_accent=selected_accent, 
-                        speech_speed=speech_speed
-                    )
-                    
-                    if audio_bytes:
-                        st.success(f"Audio generated successfully with {tts_provider[1]}!")
-                        
-                        # Store audio in session state
-                        st.session_state.audio_bytes = audio_bytes
-                        st.session_state.audio_ready = True
-                        st.session_state.tts_provider = tts_provider[1]
-        
-        # Audio playback and download section
-        if hasattr(st.session_state, 'audio_ready') and st.session_state.audio_ready:
-            st.header("🎧 Audio Playback & Download")
-            
-            # Audio player
-            st.audio(st.session_state.audio_bytes, format='audio/mp3')
-            
-            # Download button
-            filename = "tamil_poetry_audio.mp3"
-            st.download_button(
-                label="📥 Download MP3",
-                data=st.session_state.audio_bytes,
-                file_name=filename,
-                mime="audio/mp3"
+            generate_original = st.checkbox(
+                "🎭 Original Classical Text", 
+                value=True,
+                help="Generate audio for the original classical Tamil text as-is"
             )
+        
+        with col2:
+            generate_modern = st.checkbox(
+                "🆕 Modern Translation", 
+                value=True, 
+                help="Generate audio for the modern meaning-based translation"
+            )
+        
+        with col3:
+            if processed_text != tamil_text:
+                st.info("Both versions available")
+            else:
+                st.info("Only original text available")
+                generate_modern = False  # Disable if no processing was done
+        
+        # Generate audio buttons
+        if generate_original or generate_modern:
+            col1, col2 = st.columns(2)
             
-            # File info
-            audio_size = len(st.session_state.audio_bytes)
-            st.info(f"Audio file size: {audio_size / 1024:.1f} KB")
+            # Generate original audio
+            if generate_original:
+                with col1:
+                    if st.button("🔊 Generate Original Audio", type="primary"):
+                        with st.spinner(f"Generating original audio using {tts_provider[1]}..."):
+                            original_audio_bytes = text_to_speech_tamil(
+                                tamil_text, 
+                                provider=tts_provider[0], 
+                                voice_accent=selected_accent, 
+                                speech_speed=speech_speed
+                            )
+                            
+                            if original_audio_bytes:
+                                st.success(f"Original audio generated successfully!")
+                                
+                                # Store original audio in session state
+                                st.session_state.original_audio_bytes = original_audio_bytes
+                                st.session_state.original_audio_ready = True
+                                st.session_state.tts_provider = tts_provider[1]
+            
+            # Generate modern audio (only if different from original)
+            if generate_modern and processed_text != tamil_text:
+                with col2:
+                    if st.button("🔊 Generate Modern Audio", type="primary"):
+                        with st.spinner(f"Generating modern translation audio using {tts_provider[1]}..."):
+                            modern_audio_bytes = text_to_speech_tamil(
+                                processed_text, 
+                                provider=tts_provider[0], 
+                                voice_accent=selected_accent, 
+                                speech_speed=speech_speed
+                            )
+                            
+                            if modern_audio_bytes:
+                                st.success(f"Modern translation audio generated successfully!")
+                                
+                                # Store modern audio in session state
+                                st.session_state.modern_audio_bytes = modern_audio_bytes
+                                st.session_state.modern_audio_ready = True
+                                st.session_state.tts_provider = tts_provider[1]
+            
+            # Generate both button (if both are selected)
+            if generate_original and generate_modern and processed_text != tamil_text:
+                st.markdown("---")
+                if st.button("🔊🔊 Generate Both Audio Versions", type="secondary"):
+                    with st.spinner(f"Generating both audio versions using {tts_provider[1]}..."):
+                        # Generate original audio
+                        original_audio_bytes = text_to_speech_tamil(
+                            tamil_text, 
+                            provider=tts_provider[0], 
+                            voice_accent=selected_accent, 
+                            speech_speed=speech_speed
+                        )
+                        
+                        # Generate modern audio
+                        modern_audio_bytes = text_to_speech_tamil(
+                            processed_text, 
+                            provider=tts_provider[0], 
+                            voice_accent=selected_accent, 
+                            speech_speed=speech_speed
+                        )
+                        
+                        if original_audio_bytes and modern_audio_bytes:
+                            st.success(f"Both audio versions generated successfully!")
+                            
+                            # Store both audio versions in session state
+                            st.session_state.original_audio_bytes = original_audio_bytes
+                            st.session_state.original_audio_ready = True
+                            st.session_state.modern_audio_bytes = modern_audio_bytes
+                            st.session_state.modern_audio_ready = True
+                            st.session_state.tts_provider = tts_provider[1]
+                        elif original_audio_bytes:
+                            st.warning("Original audio generated, but modern audio failed")
+                            st.session_state.original_audio_bytes = original_audio_bytes
+                            st.session_state.original_audio_ready = True
+                            st.session_state.tts_provider = tts_provider[1]
+                        elif modern_audio_bytes:
+                            st.warning("Modern audio generated, but original audio failed")
+                            st.session_state.modern_audio_bytes = modern_audio_bytes
+                            st.session_state.modern_audio_ready = True
+                            st.session_state.tts_provider = tts_provider[1]
+        
+        # Dual audio playback and download section
+        audio_sections_exist = False
+        
+        # Original audio playback section
+        if hasattr(st.session_state, 'original_audio_ready') and st.session_state.original_audio_ready:
+            audio_sections_exist = True
+            st.header("🎭 Original Classical Tamil Audio")
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                # Audio player for original
+                st.audio(st.session_state.original_audio_bytes, format='audio/mp3')
+                
+            with col2:
+                # Download button for original
+                original_filename = "classical_tamil_original.mp3"
+                st.download_button(
+                    label="📥 Download Original",
+                    data=st.session_state.original_audio_bytes,
+                    file_name=original_filename,
+                    mime="audio/mp3"
+                )
+                
+                # File info for original
+                original_size = len(st.session_state.original_audio_bytes)
+                st.caption(f"Size: {original_size / 1024:.1f} KB")
+        
+        # Modern audio playback section
+        if hasattr(st.session_state, 'modern_audio_ready') and st.session_state.modern_audio_ready:
+            audio_sections_exist = True
+            st.header("🆕 Modern Translation Audio")
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                # Audio player for modern
+                st.audio(st.session_state.modern_audio_bytes, format='audio/mp3')
+                
+            with col2:
+                # Download button for modern
+                modern_filename = "tamil_modern_translation.mp3"
+                st.download_button(
+                    label="📥 Download Modern",
+                    data=st.session_state.modern_audio_bytes,
+                    file_name=modern_filename,
+                    mime="audio/mp3"
+                )
+                
+                # File info for modern
+                modern_size = len(st.session_state.modern_audio_bytes)
+                st.caption(f"Size: {modern_size / 1024:.1f} KB")
+        
+        # Audio comparison section (if both audios exist)
+        if (hasattr(st.session_state, 'original_audio_ready') and st.session_state.original_audio_ready and 
+            hasattr(st.session_state, 'modern_audio_ready') and st.session_state.modern_audio_ready):
+            
+            st.header("🔄 Audio Comparison")
+            st.info("Compare the pronunciation and clarity between classical and modern versions")
+            
+            comparison_col1, comparison_col2 = st.columns(2)
+            
+            with comparison_col1:
+                st.subheader("🎭 Classical Version")
+                st.audio(st.session_state.original_audio_bytes, format='audio/mp3')
+                original_size = len(st.session_state.original_audio_bytes)
+                st.caption(f"Original classical Tamil text ({original_size / 1024:.1f} KB)")
+                
+            with comparison_col2:
+                st.subheader("🆕 Modern Version")
+                st.audio(st.session_state.modern_audio_bytes, format='audio/mp3')
+                modern_size = len(st.session_state.modern_audio_bytes)
+                st.caption(f"Modern meaning-based translation ({modern_size / 1024:.1f} KB)")
+        
+        # Show message if no audio generated yet
+        if not audio_sections_exist:
+            st.info("🎵 Select audio versions above and click generate to create audio files")
     
     else:
         st.info("👆 Please enter Tamil text above to generate audio")
